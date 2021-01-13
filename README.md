@@ -1,7 +1,7 @@
 # shtpl
 **SHell TemPLating**
 
-`shtpl` is a templating tool that uses a [jinja-style syntax](shtpl.test) (but waaaaay simpler) to generate text files:
+[`shtpl`](shtpl) is a templating tool that uses a [jinja-style syntax](shtpl.test) (but waaaaay simpler) to generate text files:
 
 ```
 # ./shtpl < shtpl.test
