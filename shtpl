@@ -1,0 +1,162 @@
+#!/bin/bash -e
+# shellcheck disable=SC1090
+
+# SHTPL: very simple SHell TemPLating script
+#
+# Features:
+# - supports {% if <condition> %} / {% endif %} conditional block based on evaluations with shell variables:
+#   {% if $ldap_multimaster == "true" %} => [[ $ldap_multimaster == "true" ]]
+#   {% if $ldap_multimaster %} => [[ $ldap_multimaster ]]
+# - supports {% for <condition> %} / {% endfor %} conditional block based on evaluations with shell variables:
+#   {% for n in 1 2 3 4 %} => for n in 1 2 3 4; do
+# - supports inline subshell executions also within 'for' and 'if' blocks.
+#   $(grep something /my/file)
+# - supports inline arithmetic operations also within 'for' and 'if' blocks.
+#   $(( n%2+1 ))
+# - supports variable definition:
+#   {{ n=54 }}
+# - supports just one 'for' block inside an 'if' block
+# - supports just one 'if' block inside a 'for' block
+# - supports comments: do not expand variables as it is usually helpful within comments
+#
+# Gotchas:
+#   - it fails on runtime, NO condition or syntax pre-check is done whatsoever
+#   - does NOT support nested blocks not mentioned in features
+#   - if two $() subshell blocks are found within the same line only the last one will be run and expanded
+#   - if two $(( )) arithmetic operation blocks are found within the same line only the last one will be run and expanded
+#
+# NOTE: exactly one space after and before '%' is mandatory
+
+declare SCRIPTNAME
+SCRIPTNAME="$(basename "$0")"
+
+#  will store variables from lines {{ }}
+VARS="$(mktemp -p /dev/shm/ -t "$SCRIPTNAME.vars.XXXX")"
+
+while IFS= read -r line || [ -n "$line" ]; do
+  # begin if-block
+  if [[ $line =~ ^\{%\ if.*\ %\} ]]; then
+    in_if_block=true
+    IF_CONDITION="$(echo "$line" | sed -e 's/{% if //' -e 's/ %}//')"
+    if [[ ! $in_for_block ]]; then
+      if bash -uc "source $VARS; [[ $IF_CONDITION ]]" 2> /dev/null; then
+        is_if_true=true
+        continue
+      fi
+    else
+      in_forif_block=true
+      echo "    if [[ $IF_CONDITION ]]; then" >> "$FOR_BLOCK"
+    fi
+
+  # begin for-block
+  elif [[ $line =~ ^\{%\ for.*\ %\} ]]; then
+    in_for_block=true
+    if [[ $in_if_block ]] && [[ ! $is_if_true ]]; then
+      avoid_for_block=true
+      continue
+    elif [[ $in_else_block ]] && [[ ! $is_else_true ]]; then
+      avoid_for_block=true
+      continue
+    fi
+    FOR_CONDITION="$(echo "$line" | sed -e 's/{% for //' -e 's/ %}//')"
+    FOR_BLOCK="$(mktemp -p /dev/shm/ -t "$SCRIPTNAME.for_block.XXXX")"
+    cat << EOF > "$FOR_BLOCK"
+# get  defined VARS
+source $VARS
+for $FOR_CONDITION; do
+EOF
+    continue
+
+  # variable definition
+  elif [[ $line =~ ^\{\{\ (.*)=(.*)\ \}\} ]]; then
+    eval "${BASH_REMATCH[1]}"="${BASH_REMATCH[2]}"
+    declare -p "${BASH_REMATCH[1]}" >> "$VARS"
+    echo "export ${BASH_REMATCH[1]}" >> "$VARS"
+
+  # if comment then do not check for unset variables
+  elif [[ $line =~ ^[[:space:]]*#.*$ ]]; then
+    if [[ $in_for_block ]]; then
+      echo "    echo \"$line\"" >> "$FOR_BLOCK"
+    else
+      echo "$line"
+    fi
+
+  # if $(( )) is found calculate arithmetic operation as in bash 4.X
+  elif [[ $line =~ ^(.*[^\\\\]{1})\$\(\((.*)\)\)(.*)$ ]] && [[ ! $in_for_block ]]; then
+    echo "${BASH_REMATCH[1]}$(( BASH_REMATCH[2] ))${BASH_REMATCH[3]}"
+
+  # if subshell is found then run it and print output
+  elif [[ $line =~ ^(.*[^\\\\]{1})\$\((.*)\)(.*)$ ]] && [[ ! $in_for_block ]]; then
+    echo -n "${BASH_REMATCH[1]}"
+    bash -uc "source $VARS;${BASH_REMATCH[2]}"
+    echo "${BASH_REMATCH[3]}"
+
+  # else if-block
+  elif [[ $line =~ ^\{%\ else\ %\} ]]; then
+    if [[ ! $is_if_true ]]; then
+      is_else_true=true
+    fi
+    in_else_block=true
+    unset in_if_block
+    if [[ $in_for_block ]]; then
+      echo "    else" >> "$FOR_BLOCK"
+    fi
+    continue
+
+  # end if-block
+  elif [[ $line =~ ^\{%\ endif\ %\} ]]; then
+    if [[ $in_for_block ]]; then
+      echo "    fi" >> "$FOR_BLOCK"
+    fi
+    unset in_if_block in_else_block is_if_true is_else_true
+    continue
+
+  # end for-block
+  elif [[ $line =~ ^\{%\ endfor\ %\} ]]; then
+    if [[ ! $avoid_for_block ]]; then
+      echo "done" >> "$FOR_BLOCK"
+      # if within for-block do not check for unset variables
+      if [[ $in_forif_block ]]; then
+        bash "$FOR_BLOCK"
+        unset in_forif_block
+      else
+        bash -u "$FOR_BLOCK"
+      fi
+      # remove for block and previous vars file
+      rm -f "$FOR_BLOCK"
+    fi
+    unset in_for_block avoid_for_block
+    continue
+
+  # if inside if-block and condition was met
+  elif [[ ! $in_for_block ]] && [[ $in_if_block ]]   && [[ $is_if_true ]]; then
+    # echo line contents expanding variables
+    bash -uc "source \"$VARS\"; echo \"$line\""
+
+  # if inside else-block and condition was met
+  elif [[ ! $in_for_block ]] && [[ $in_else_block ]] && [[ $is_else_true ]]; then
+    # echo line contents expanding variables
+    bash -uc "source \"$VARS\"; echo \"$line\""
+
+  # if inside if-block but condition was NOT met then noop
+  elif [[ ! $in_for_block ]] && [[ $in_if_block ]]   && [[ ! $is_if_true ]]; then
+    continue
+
+  # if inside else-block but condition was NOT met then noop
+  elif [[ ! $in_for_block ]] && [[ $in_else_block ]] && [[ ! $is_else_true ]]; then
+    continue
+
+  # if inside for-block and condition was met
+  elif [[ $in_for_block ]]; then
+    if [[ ! $avoid_for_block ]]; then
+      echo "    echo \"$line\"" >> "$FOR_BLOCK"
+    fi
+
+  # if no other if matched then just print line contents expanding variables
+  else
+    bash -uc "source \"$VARS\" ; echo \"$line\""
+  fi
+done < /dev/stdin
+
+# cleanup
+rm -f "$FOR_BLOCK" "$VARS"
