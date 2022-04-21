@@ -39,7 +39,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     in_if_block=true
     IF_CONDITION="$(echo "$line" | sed -e 's/{% if //' -e 's/ %}//')"
     if [[ ! $in_for_block ]]; then
-      if bash -uc "source $VARS; [[ $IF_CONDITION ]]" 2> /dev/null; then
+      if bash -c "source $VARS; [[ $IF_CONDITION ]]" 2> /dev/null; then
         is_if_true=true
         continue
       fi
@@ -77,7 +77,9 @@ EOF
   elif [[ $line =~ ^[[:space:]]*#.*$ ]]; then
     if [[ $in_for_block ]]; then
       echo "    echo \"$line\"" >> "$FOR_BLOCK"
-    else
+    elif [[ $in_if_block ]] && [[ $is_if_true ]]; then
+      echo "$line"
+    elif [[ ! $in_if_block ]]; then
       echo "$line"
     fi
 
@@ -86,7 +88,8 @@ EOF
     echo "${BASH_REMATCH[1]}$(( BASH_REMATCH[2] ))${BASH_REMATCH[3]}"
 
   # if subshell is found then run it and print output
-  elif [[ $line =~ ^(.*[^\\\\]{1})\$\((.*)\)(.*)$ ]] && [[ ! $in_for_block ]]; then
+  elif [[ $line =~ ^(.*[^\\\\]{1})\$\((.*)\)(.*)$ ]] && [[ ! $in_for_block ]] && ( \
+       [[ $in_if_block ]] && [[ $is_if_true ]] || [[ ! $in_if_block ]]); then
     echo -n "${BASH_REMATCH[1]}"
     bash -uc "source $VARS;${BASH_REMATCH[2]}"
     echo "${BASH_REMATCH[3]}"
