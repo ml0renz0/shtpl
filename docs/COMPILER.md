@@ -1,8 +1,9 @@
-# F01–F03 — Template-to-Bash compiler and Bash expressions
+# F01–F04 — Template-to-Bash compiler, Bash expressions, and diagnostics
 
 Shtpl compiles the template from standard input into an executable Bash program:
 
 ```sh
+shtpl --check < example.tpl
 shtpl --compile < example.tpl > example.sh
 bash -n example.sh
 bash example.sh
@@ -40,7 +41,29 @@ valid.
 
 F03 validates multiple substitutions, quoting, escaping, arrays, inactive branch
 isolation and trailing backslashes. All originally pending contracts are active.
-F04 will extend diagnostics and syntax checking.
+F04 adds `--check`, compile-time validation of the generated script with
+`bash -n`, and diagnostics translated to template source line numbers. It
+also identifies malformed/unknown directives, block opening locations, and
+incorrect block endings. Invalid templates are rejected with exit status 2
+before any generated Bash is executed. `--check` emits nothing to stdout and
+executes no template commands; `--compile` emits no Bash on validation failure.
+
+Bash syntax validation checks **the generated Bash grammar**, not the result of
+evaluating an expansion. In particular, `bash -n` does not fully parse the
+contents of unquoted heredocs, and therefore cannot guarantee that arbitrary
+runtime substitutions inside template text will succeed. Errors reported at
+end-of-file can sometimes be mapped only to the final nearby source line.
+
+Examples of diagnostics:
+
+```text
+shtpl: unexpected endfor at line 2 (expected to close if opened at line 1)
+shtpl: invalid Bash syntax at template line 2 (generated line 6): syntax error near unexpected token ...
+```
+
+Successful `--check` and `--compile` return 0 without executing template
+commands. Neither is a security sandbox; running templates remains reserved
+for trusted inputs.
 
 This compiler does **not** sandbox the generated script. As with the legacy
 engine, execute only trusted templates: assignments, substitutions, and
@@ -63,4 +86,6 @@ are literal, not shell quoting operators. Trailing backslashes are preserved.
   generated 32-level nesting, sibling blocks, empty bodies, both execution
   modes, and seven structural error cases.
 - `bash tests/expressions-smoke.sh` checks F03 expression/escaping regressions.
+- `bash tests/diagnostics-smoke.sh` checks F04 validation and diagnostic cases,
+  including output/side-effect isolation, in all existing Bash CI matrices.
 - The CI matrix includes Ubuntu 22.04/24.04 and Bash 4.4.
