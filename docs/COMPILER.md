@@ -1,4 +1,4 @@
-# F01 — Template-to-Bash compiler
+# F01–F02 — Template-to-Bash compiler with arbitrary nesting
 
 Shtpl compiles the template from standard input into an executable Bash program:
 
@@ -21,21 +21,25 @@ command substitutions do not need to be evaluated by the compiler. Output
 includes a newline after the final template line, matching the legacy contract.
 The compiler uses Bash built-ins for scanning and emits deterministic output.
 
-## Supported syntax in F01
+## Supported syntax
 
 - Literal lines and comments
 - `{{ NAME=value }}` and Bash-compatible assignments, including arrays
 - `{% if condition %}`, `{% else %}`, `{% endif %}`
 - `{% for expression %}`, `{% endfor %}`
 - Expansion of `$NAME`, `$(command)`, and `$((expression))` at script runtime
-- Existing one-level mixed blocks: `if -> for` and `for -> if`
+- Arbitrary nesting of `if` and `for` in any combination, including siblings and empty blocks
 
 ## Deferred guarantees
 
-F02 establishes the full arbitrary-depth nesting contract. F03 defines all
-quoting/escaping and multiple-expansion semantics. F04 formalizes diagnostics
-and syntax checking. The F00 pending tests remain skipped until their
-respective contracts are explicitly enabled.
+F02 establishes the arbitrary-depth nesting contract, tracking branch state at
+each nesting level. Each `else` belongs to the most recent open `if` and may
+occur only once. Misplaced `else`, `endif`, `endfor`, and unterminated blocks
+cause a compile-time exit status of 2. Empty `if` / `else` / `for` bodies are
+valid.
+
+F03 will formalize quoting/escaping and multiple-expansion semantics; F04 will
+extend diagnostics and syntax checking. Only the F03 pending tests remain skipped.
 
 This compiler does **not** sandbox the generated script. As with the legacy
 engine, execute only trusted templates: assignments, substitutions, and
@@ -47,6 +51,9 @@ condition/loop expressions can run arbitrary shell commands at runtime.
   golden fixtures.
 - `bash tests/compile-smoke.sh` checks that compiling and running produces
   the same exact bytes and that generated scripts pass `bash -n`.
-- `bats tests/compiler.bats` checks absence of compile-time side effects and
-  basic block termination failures.
+- `bats tests/compiler.bats tests/known-issues.bats` checks compile-time side
+  effects, block validation, and the four formerly pending F02 fixtures.
+- `bash tests/nesting-smoke.sh` verifies ten-level static nesting, dynamically
+  generated 32-level nesting, sibling blocks, empty bodies, both execution
+  modes, and seven structural error cases.
 - The CI matrix includes Ubuntu 22.04/24.04 and Bash 4.4.
