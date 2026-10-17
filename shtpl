@@ -7,8 +7,8 @@ usage() {
 }
 
 compile() {
-  local line body lineno=0
-  local -a blocks=()
+  local line body lineno=0 top
+  local -a blocks=() else_seen=()
 
   printf '#!/usr/bin/env bash\nset -u\n'
 
@@ -19,28 +19,41 @@ compile() {
       '{% if '*' %}')
         body=${line#'{% if '}
         body=${body%' %}'}
-        printf 'if [[ %s ]]; then\n' "$body"
+        printf 'if [[ %s ]]; then\n:\n' "$body"
         blocks+=(if)
+        else_seen+=(0)
         ;;
       '{% for '*' %}')
         body=${line#'{% for '}
         body=${body%' %}'}
-        printf 'for %s; do\n' "$body"
+        printf 'for %s; do\n:\n' "$body"
         blocks+=(for)
+        else_seen+=(0)
         ;;
       '{% else %}')
-        [[ ${#blocks[@]} -gt 0 && ${blocks[-1]} == if ]] || { printf 'shtpl: unexpected else at line %d\n' "$lineno" >&2; return 2; }
-        printf 'else\n'
+        if (( ${#blocks[@]} == 0 )) || [[ ${blocks[-1]} != if ]]; then
+          printf 'shtpl: unexpected else at line %d\n' "$lineno" >&2
+          return 2
+        fi
+        top=$(( ${#blocks[@]} - 1 ))
+        if (( else_seen[top] )); then
+          printf 'shtpl: duplicate else at line %d\n' "$lineno" >&2
+          return 2
+        fi
+        else_seen[top]=1
+        printf 'else\n:\n'
         ;;
       '{% endif %}')
         [[ ${#blocks[@]} -gt 0 && ${blocks[-1]} == if ]] || { printf 'shtpl: unexpected endif at line %d\n' "$lineno" >&2; return 2; }
         printf 'fi\n'
-        unset 'blocks[-1]'
+        top=$(( ${#blocks[@]} - 1 ))
+        unset "blocks[$top]" "else_seen[$top]"
         ;;
       '{% endfor %}')
         [[ ${#blocks[@]} -gt 0 && ${blocks[-1]} == for ]] || { printf 'shtpl: unexpected endfor at line %d\n' "$lineno" >&2; return 2; }
         printf 'done\n'
-        unset 'blocks[-1]'
+        top=$(( ${#blocks[@]} - 1 ))
+        unset "blocks[$top]" "else_seen[$top]"
         ;;
       '{{ '*' }}')
         body=${line#'{{ '}
