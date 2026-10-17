@@ -2,8 +2,33 @@
 # shtpl: compile trusted templates into Bash, then optionally execute them.
 set -euo pipefail
 
+SHTPL_VERSION=2.0.0
+
 usage() {
-  printf 'Usage: shtpl [--compile|--check|--help] < template.tpl\n'
+  cat <<'USAGE'
+Usage: shtpl [--compile|--check] [--input FILE] [--output FILE]
+       shtpl --help
+       shtpl --version
+
+Modes (default: render the template):
+  --compile          Validate and emit generated Bash without executing it
+  --check            Validate only; do not execute or emit output
+
+Options:
+  -i, --input FILE    Read from FILE (default: - for standard input)
+  -o, --output FILE   Write to FILE (default: - for standard output)
+  -h, --help          Show this help
+  --version           Show the version
+
+--check cannot be combined with --output.
+Template execution is only safe for trusted input.
+USAGE
+}
+
+cli_error() {
+  printf 'shtpl: %s\n' "$1" >&2
+  usage >&2
+  return 2
 }
 
 record_lines() {
@@ -156,11 +181,12 @@ validate_bash() {
   return 2
 }
 
-workdir= child_pid=
+workdir= child_pid= temp_output=
 
-# Each invocation owns a private workspace.  In particular, the diagnostics
-# file must not be created next to a predictable public /tmp filename.
 cleanup_workspace() {
+  if [[ -n ${temp_output-} ]]; then
+    rm -f -- "$temp_output"
+  fi
   if [[ -n ${workdir-} ]]; then
     rm -rf -- "$workdir"
   fi
@@ -170,7 +196,6 @@ handle_signal() {
   local exit_code=$1
   trap - HUP INT TERM
   if [[ -n ${child_pid-} ]]; then
-    # A signal sent only to the wrapper must also stop the template runner.
     kill -TERM "$child_pid" 2>/dev/null || :
     wait "$child_pid" 2>/dev/null || :
     child_pid=
@@ -178,8 +203,17 @@ handle_signal() {
   exit "$exit_code"
 }
 
+run_generated() {
+  local script=$1 status=0
+  bash "$script" &
+  child_pid=$!
+  wait "$child_pid" || status=$?
+  child_pid=
+  return "$status"
+}
+
 process_template() {
-  local mode=$1 script diagnostic status=0
+  local mode=$1 input_file=$2 output_file=$3 script diagnostic parent
   umask 077
   workdir=$(mktemp -d -- "${TMPDIR:-/tmp}/shtpl.XXXXXXXX") || {
     printf 'shtpl: cannot create temporary workspace\n' >&2
@@ -192,29 +226,117 @@ process_template() {
   trap 'handle_signal 130' INT
   trap 'handle_signal 143' TERM
 
-  compile > "$script" || return $?
+  if [[ $input_file == - ]]; then
+    compile > "$script" || return $?
+  else
+    compile < "$input_file" > "$script" || return $?
+  fi
   validate_bash "$script" "$diagnostic" || return $?
+  if [[ $mode == check ]]; then
+    return 0
+  fi
+
+  # Stage output alongside its destination for an atomic rename on success.
+  # The original output remains untouched after failed validation or execution.
+  if [[ $output_file != - ]]; then
+    parent=$(dirname -- "$output_file") || return 1
+    temp_output=$(mktemp -- "$parent/.shtpl.XXXXXXXX") || {
+      printf 'shtpl: cannot create output file: %s\n' "$output_file" >&2
+      return 1
+    }
+  fi
+
   case $mode in
-    check) ;;
-    compile) cat -- "$script" ;;
+    compile)
+      if [[ $output_file == - ]]; then
+        cat -- "$script" || return $?
+      else
+        cat -- "$script" > "$temp_output" || return $?
+      fi
+      ;;
     execute)
-      bash "$script" &
-      child_pid=$!
-      wait "$child_pid" || status=$?
-      child_pid=
-      return "$status"
+      if [[ $output_file == - ]]; then
+        run_generated "$script" || return $?
+      else
+        run_generated "$script" > "$temp_output" || return $?
+      fi
       ;;
   esac
+
+  if [[ $output_file != - ]]; then
+    mv -fT -- "$temp_output" "$output_file" || {
+      printf 'shtpl: cannot publish output file: %s\n' "$output_file" >&2
+      return 1
+    }
+    temp_output=
+  fi
 }
 
 main() {
-  case ${1-} in
-    --help|-h) usage ;;
-    --compile) [[ $# == 1 ]] || { usage >&2; return 2; }; process_template compile ;;
-    --check) [[ $# == 1 ]] || { usage >&2; return 2; }; process_template check ;;
-    '') [[ $# == 0 ]] || { usage >&2; return 2; }; process_template execute ;;
-    *) usage >&2; return 2 ;;
-  esac
+  local mode=execute input_file=- output_file=- mode_set=0 input_set=0 output_set=0
+  local option value
+  while (($#)); do
+    case $1 in
+      --help|-h)
+        (($# == 1)) || { cli_error '--help cannot be combined with other options'; return 2; }
+        usage
+        return 0
+        ;;
+      --version)
+        (($# == 1)) || { cli_error '--version cannot be combined with other options'; return 2; }
+        printf 'shtpl %s\n' "$SHTPL_VERSION"
+        return 0
+        ;;
+      --compile|--check)
+        ((mode_set == 0)) || { cli_error 'choose only one mode'; return 2; }
+        mode=${1#--}
+        mode_set=1
+        shift
+        ;;
+      -i|--input|-o|--output)
+        option=$1
+        (($# >= 2)) && [[ -n $2 ]] || { cli_error "missing value for $option"; return 2; }
+        value=$2
+        shift 2
+        case $option in
+          -i|--input)
+            ((input_set == 0)) || { cli_error 'duplicate --input'; return 2; }
+            input_file=$value
+            input_set=1
+            ;;
+          -o|--output)
+            ((output_set == 0)) || { cli_error 'duplicate --output'; return 2; }
+            output_file=$value
+            output_set=1
+            ;;
+        esac
+        ;;
+      --input=*|--output=*)
+        option=${1%%=*}
+        value=${1#*=}
+        [[ -n $value ]] || { cli_error "missing value for $option"; return 2; }
+        shift
+        if [[ $option == --input ]]; then
+          ((input_set == 0)) || { cli_error 'duplicate --input'; return 2; }
+          input_file=$value
+          input_set=1
+        else
+          ((output_set == 0)) || { cli_error 'duplicate --output'; return 2; }
+          output_file=$value
+          output_set=1
+        fi
+        ;;
+      *)
+        cli_error "unknown argument: $1"
+        return 2
+        ;;
+    esac
+  done
+  if [[ $mode == check && $output_set == 1 ]]; then
+    cli_error '--check does not accept --output'
+    return 2
+  fi
+  process_template "$mode" "$input_file" "$output_file"
 }
 
 main "$@"
