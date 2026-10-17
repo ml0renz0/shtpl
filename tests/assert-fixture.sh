@@ -14,7 +14,7 @@ fi
 actual="$(mktemp)"
 trap 'rm -f "$actual"' EXIT
 
-if ! bash "$root/shtpl" < "$input" > "$actual"; then
+if ! bash "$root/shtpl" <"$input" >"$actual"; then
   printf 'SHTPL failed for %s\n' "$name" >&2
   exit 1
 fi
