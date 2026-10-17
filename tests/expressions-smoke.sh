@@ -7,15 +7,15 @@ work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 check() {
   local name=$1 source=$2 expected=$3
-  printf '%s' "$source" > "$work/input"
-  printf '%s' "$expected" > "$work/expected"
-  bash "$root/shtpl" --compile < "$work/input" > "$work/generated"
+  printf '%s' "$source" >"$work/input"
+  printf '%s' "$expected" >"$work/expected"
+  bash "$root/shtpl" --compile <"$work/input" >"$work/generated"
   bash -n "$work/generated"
-  bash "$root/shtpl" < "$work/input" > "$work/direct"
-  bash "$work/generated" > "$work/compiled"
+  bash "$root/shtpl" <"$work/input" >"$work/direct"
+  bash "$work/generated" >"$work/compiled"
   cmp "$work/expected" "$work/direct"
   cmp "$work/expected" "$work/compiled"
-  bash "$root/shtpl" --compile < "$work/input" > "$work/repeated"
+  bash "$root/shtpl" --compile <"$work/input" >"$work/repeated"
   cmp "$work/generated" "$work/repeated"
   printf 'PASS F03 %s\n' "$name"
 }
@@ -65,10 +65,10 @@ active=ok
 {% endif %}
 ' 'active=ok
 '
-printf 'effect=$(touch %q; printf good)\n' "$work/effect" > "$work/input"
-bash "$root/shtpl" --compile < "$work/input" > "$work/generated"
+printf 'effect=$(touch %q; printf good)\n' "$work/effect" >"$work/input"
+bash "$root/shtpl" --compile <"$work/input" >"$work/generated"
 [[ ! -e "$work/effect" ]]
-bash "$work/generated" > "$work/result"
+bash "$work/generated" >"$work/result"
 [[ -f "$work/effect" ]]
 [[ $(cat "$work/result") == effect=good ]]
 printf 'F03 expression compatibility tests passed\n'
