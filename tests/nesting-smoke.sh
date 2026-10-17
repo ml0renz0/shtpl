@@ -20,7 +20,7 @@ done
 # Alternate 32 nested conditionals/loops to verify depth is not hard-coded.
 for ((depth = 0; depth < 16; depth++)); do
   printf '{%% for idx%d in 1 %%}\n' "$depth" >>"$work/deep.tpl"
-  printf '{%% if %sidx%d == 1 %%}\n' '
+  printf '{%% if %sidx%d == 1 %%}\n' '$' "$depth" >>"$work/deep.tpl"
 done
 printf 'deep=ok\n' >>"$work/deep.tpl"
 for ((depth = 15; depth >= 0; depth--)); do
