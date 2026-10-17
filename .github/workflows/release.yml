@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify release tag and source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$(bash shtpl --version)" == "shtpl ${tag#v}" ]]
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main
+      - name: Test and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y bats
+          bash -n shtpl
+          bats tests/baseline.bats tests/known-issues.bats tests/compiler.bats
+          for test in tests/*-smoke.sh tests/smoke.sh; do
+            bash "$test"
+          done
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          git archive --format=tar --prefix="shtpl-$version/" HEAD shtpl README.md LICENSE docs CHANGELOG.md |
+            gzip -n -9 > "dist/shtpl-$version.tar.gz"
+          (cd dist && sha256sum "shtpl-$version.tar.gz" > SHA256SUMS)
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "shtpl $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
