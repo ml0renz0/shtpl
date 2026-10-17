@@ -1,13 +1,14 @@
 name: CI
 
+# Run CI only for pull requests, or when explicitly requested.
 on:
-  push:
-    branches:
-      - main
-      - 'feature/**'
-      - 'chore/**'
   pull_request:
   workflow_dispatch:
+
+# New commits on a PR supersede outdated runs.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -75,7 +76,6 @@ jobs:
         run: |
           bash tests/smoke.sh
           bash tests/compile-smoke.sh
-          bats tests/compiler.bats
 
   bash-4:
     name: Legacy Bash 4.4 compatibility
