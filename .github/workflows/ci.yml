@@ -1,13 +1,14 @@
 name: CI
 
+# Run CI only for pull requests, or when explicitly requested.
 on:
-  push:
-    branches:
-      - main
-      - 'feature/**'
-      - 'chore/**'
   pull_request:
   workflow_dispatch:
+
+# New commits on a PR supersede outdated runs.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -70,9 +71,11 @@ jobs:
       - name: Print Bash version
         run: bash --version | head -n 1
       - name: Run baseline and documented pending contracts
-        run: bats tests/baseline.bats tests/known-issues.bats
+        run: bats tests/baseline.bats tests/known-issues.bats tests/compiler.bats
       - name: Cross-check golden fixtures byte-for-byte
-        run: bash tests/smoke.sh
+        run: |
+          bash tests/smoke.sh
+          bash tests/compile-smoke.sh
 
   bash-4:
     name: Legacy Bash 4.4 compatibility
@@ -86,4 +89,4 @@ jobs:
             --mount type=bind,source="${{ github.workspace }}",target=/project,readonly \
             --workdir /project \
             bash:4.4 \
-            sh -c "apk add --no-cache coreutils >/dev/null && bash tests/smoke.sh"
+            sh -c "apk add --no-cache coreutils >/dev/null && bash tests/smoke.sh && bash tests/compile-smoke.sh"
