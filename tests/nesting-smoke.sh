@@ -38,7 +38,7 @@ diff -u "$work/deep.expected" "$work/output"
 assert_compile_error() {
   local name=$1 expected=$2 status=0
   bash "$root/shtpl" --compile <"$work/$name.tpl" >"$work/generated.sh" 2>"$work/error" || status=$?
-  if (( status != 2 )) || ! grep -Fq -- "$expected" "$work/error"; then
+  if ((status != 2)) || ! grep -Fq -- "$expected" "$work/error"; then
     printf 'Expected exit 2 with "%s" for %s; got exit %d:\n' "$expected" "$name" "$status" >&2
     cat "$work/error" >&2
     return 1
