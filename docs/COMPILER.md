@@ -1,4 +1,4 @@
-# F01–F02 — Template-to-Bash compiler with arbitrary nesting
+# F01–F03 — Template-to-Bash compiler and Bash expressions
 
 Shtpl compiles the template from standard input into an executable Bash program:
 
@@ -38,12 +38,18 @@ occur only once. Misplaced `else`, `endif`, `endfor`, and unterminated blocks
 cause a compile-time exit status of 2. Empty `if` / `else` / `for` bodies are
 valid.
 
-F03 will formalize quoting/escaping and multiple-expansion semantics; F04 will
-extend diagnostics and syntax checking. Only the F03 pending tests remain skipped.
+F03 validates multiple substitutions, quoting, escaping, arrays, inactive branch
+isolation and trailing backslashes. All originally pending contracts are active.
+F04 will extend diagnostics and syntax checking.
 
 This compiler does **not** sandbox the generated script. As with the legacy
 engine, execute only trusted templates: assignments, substitutions, and
 condition/loop expressions can run arbitrary shell commands at runtime.
+
+F03 expands Bash expressions only at execution time, never during compilation.
+Comment-only lines remain literal; inline comments are ordinary template text.
+Only trusted templates should be executed. Quote characters in template text
+are literal, not shell quoting operators. Trailing backslashes are preserved.
 
 ## Verification
 
@@ -56,4 +62,5 @@ condition/loop expressions can run arbitrary shell commands at runtime.
 - `bash tests/nesting-smoke.sh` verifies ten-level static nesting, dynamically
   generated 32-level nesting, sibling blocks, empty bodies, both execution
   modes, and seven structural error cases.
+- `bash tests/expressions-smoke.sh` checks F03 expression/escaping regressions.
 - The CI matrix includes Ubuntu 22.04/24.04 and Bash 4.4.

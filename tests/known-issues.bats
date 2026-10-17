@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# F02 nesting contracts are active. F03 expansion contracts remain skipped.
+# F02 nesting and F03 repeated-expansion contracts are active.
 
 @test "F02: nested for inside for" {
   run bash "$BATS_TEST_DIRNAME/assert-fixture.sh" "pending/for-for"
@@ -22,14 +22,12 @@
   [ "$status" -eq 0 ]
 }
 
-@test "pending: multiple command substitutions on one line" {
-  skip "Future feature: multiple expansions are not implemented"
+@test "F03: multiple command substitutions on one line" {
   run bash "$BATS_TEST_DIRNAME/assert-fixture.sh" "pending/multiple-commands"
   [ "$status" -eq 0 ]
 }
 
-@test "pending: multiple arithmetic expansions on one line" {
-  skip "Future feature: multiple expansions are not implemented"
+@test "F03: multiple arithmetic expansions on one line" {
   run bash "$BATS_TEST_DIRNAME/assert-fixture.sh" "pending/multiple-arithmetic"
   [ "$status" -eq 0 ]
 }

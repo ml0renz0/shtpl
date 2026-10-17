@@ -58,7 +58,7 @@ compile() {
       '{{ '*' }}')
         body=${line#'{{ '}
         body=${body%' }}'}
-        if [[ $body =~ ^[a-zA-Z_][a-zA-Z_0-9]*= ]]; then
+        if [[ $body =~ ^[a-zA-Z_][a-zA-Z_0-9]*= || $body =~ ^declare[[:space:]]+-[aA][[:space:]]+[a-zA-Z_][a-zA-Z_0-9]*= ]]; then
           printf '%s\n' "$body"
         else
           emit_text "$line" "$lineno"
@@ -81,6 +81,10 @@ emit_text() {
   # Comments must be literal; other text is expanded only by generated Bash.
   if [[ $line =~ ^[[:space:]]*# ]]; then
     printf "cat <<'%s'\n%s\n%s\n" "$marker" "$line" "$marker"
+  elif [[ $line == *\\ ]]; then
+    # Protect the marker from a trailing backslash.
+    printf '(\n__shtpl_line=$(cat <<%s\n%s.\n%s\n)\n' "$marker" "$line" "$marker"
+    printf '%s\n' "printf '%s\n' \"\${__shtpl_line%.}\"" ')'
   else
     printf 'cat <<%s\n%s\n%s\n' "$marker" "$line" "$marker"
   fi
