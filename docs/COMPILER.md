@@ -1,4 +1,4 @@
-# F01–F04 — Template-to-Bash compiler, Bash expressions, and diagnostics
+# F01–F05 — Template-to-Bash compiler, Bash expressions, and diagnostics
 
 Shtpl compiles the template from standard input into an executable Bash program:
 
@@ -74,6 +74,26 @@ Comment-only lines remain literal; inline comments are ordinary template text.
 Only trusted templates should be executed. Quote characters in template text
 are literal, not shell quoting operators. Trailing backslashes are preserved.
 
+## F05 — Robustness and security
+
+The compiler sets `umask 077` and creates a unique private directory with
+`mktemp -d` under `${TMPDIR:-/tmp}`. Generated scripts and diagnostic files are
+created inside this directory, avoiding predictable sibling filenames.
+The workspace is removed on ordinary exits, failures, and caught HUP, INT,
+and TERM signals. During execution, a signal received by the wrapper is
+forwarded to its direct Bash child. Runtime exit status is preserved.
+
+Cleanup is **best-effort**: SIGKILL, power loss, and interpreter crashes cannot
+trigger Bash traps. Arbitrary subprocess trees spawned by templates are not
+managed. Shell output produced before a runtime failure is not transactional.
+
+Templates are executable Bash programs, not inert data. `--check` only performs
+syntactic validation and does not prevent malicious or unsafe runtime
+substitutions. `--compile` emits executable code. Neither mode is a sandbox.
+Execute only trusted templates, and do not evaluate untrusted inputs as shell
+expressions. Bash's line reader does not support binary NUL input; very large
+templates retain source-line mappings in memory.
+
 ## Verification
 
 - `bash tests/smoke.sh` checks default execution against the nine legacy
@@ -88,4 +108,6 @@ are literal, not shell quoting operators. Trailing backslashes are preserved.
 - `bash tests/expressions-smoke.sh` checks F03 expression/escaping regressions.
 - `bash tests/diagnostics-smoke.sh` checks F04 validation and diagnostic cases,
   including output/side-effect isolation, in all existing Bash CI matrices.
+- `bash tests/security-smoke.sh` checks temporary permissions, cleanup, signal
+  forwarding, error propagation, UTF-8, marker collision and large input.
 - The CI matrix includes Ubuntu 22.04/24.04 and Bash 4.4.
