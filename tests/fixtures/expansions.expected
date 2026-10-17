@@ -1,0 +1,3 @@
+arithmetic=5
+command=hello
+escaped=$UNDEFINED
