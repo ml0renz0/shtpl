@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # F04: syntax and structural diagnostics, source locations, and safety.
+# shellcheck disable=SC2016
+# Single-quoted fixture expressions must remain unevaluated until runtime.
 set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
