@@ -72,7 +72,11 @@ check_bytes() {
 printf '%s\n' '__SHTPL_00000001__' >"$work/input"
 cp "$work/input" "$work/expected"
 check_bytes marker-collision
-printf '%s\n' 'ñ/漢字/🙂' '# $(exit 99) `echo fail` ${MISSING}' 'slash=\' >"$work/input"
+cat >"$work/input" <<'EOF'
+ñ/漢字/🙂
+# $(exit 99) `echo fail` ${MISSING}
+slash=\
+EOF
 cp "$work/input" "$work/expected"
 check_bytes unicode-literals-backslash
 printf '%s' 'last line' >"$work/input"
@@ -110,8 +114,15 @@ for signal in TERM HUP; do
   kill -s "$signal" "$wrapper"
   status=0
   wait "$wrapper" || status=$?
-  if [[ $signal == TERM ]]; then ((status == 143)); else ((status == 129)); fi
-  ! kill -0 "$runner" 2>/dev/null
+  if [[ $signal == TERM ]]; then
+    ((status == 143))
+  else
+    ((status == 129))
+  fi
+  if kill -0 "$runner" 2>/dev/null; then
+    printf 'F05: runner survived %s\n' "$signal" >&2
+    exit 1
+  fi
   assert_clean
   ((count += 1))
 done
