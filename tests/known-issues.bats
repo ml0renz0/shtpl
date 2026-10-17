@@ -2,22 +2,22 @@
 
 # F02 nesting contracts are active. F03 expansion contracts remain skipped.
 
-@test "pending: nested for inside for" {
+@test "F02: nested for inside for" {
   run bash "$BATS_TEST_DIRNAME/assert-fixture.sh" "pending/for-for"
   [ "$status" -eq 0 ]
 }
 
-@test "pending: nested if inside if" {
+@test "F02: nested if inside if" {
   run bash "$BATS_TEST_DIRNAME/assert-fixture.sh" "pending/if-if"
   [ "$status" -eq 0 ]
 }
 
-@test "pending: for-if-for at depth three" {
+@test "F02: for-if-for at depth three" {
   run bash "$BATS_TEST_DIRNAME/assert-fixture.sh" "pending/for-if-for"
   [ "$status" -eq 0 ]
 }
 
-@test "pending: if-for-if at depth three" {
+@test "F02: if-for-if at depth three" {
   run bash "$BATS_TEST_DIRNAME/assert-fixture.sh" "pending/if-for-if"
   [ "$status" -eq 0 ]
 }
