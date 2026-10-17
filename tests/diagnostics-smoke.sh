@@ -63,7 +63,7 @@ assert_failure invalid-if-condition 'first
 assert_failure invalid-loop '{% for i in 1 2; echo unsafe %}
 {% endfor %}
 ' 'invalid Bash syntax at template line 1'
-assert_failure invalid-assignment '{{ broken=(one }}
+assert_failure invalid-assignment '{{ broken=ok; ) }}
 ' 'invalid Bash syntax at template line 1'
 
 # --check and --compile only parse/validate, never evaluate template commands.
@@ -71,9 +71,15 @@ marker="$work/runtime-effect"
 printf 'effect=$(touch %q; printf done)\n' "$marker" >"$work/valid.tpl"
 for mode in --check --compile; do
   bash "$root/shtpl" "$mode" <"$work/valid.tpl" >"$work/output"
-  [[ ! -e $marker ]] || { printf 'FAIL F04 unexpected %s side effect\n' "$mode" >&2; exit 1; }
+  [[ ! -e $marker ]] || {
+    printf 'FAIL F04 unexpected %s side effect\n' "$mode" >&2
+    exit 1
+  }
   if [[ $mode == --check ]]; then
-    [[ ! -s $work/output ]] || { printf 'FAIL F04 --check emits stdout\n' >&2; exit 1; }
+    [[ ! -s $work/output ]] || {
+      printf 'FAIL F04 --check emits stdout\n' >&2
+      exit 1
+    }
   else
     bash -n "$work/output"
   fi
@@ -85,7 +91,7 @@ bash "$root/shtpl" <"$work/valid.tpl" >"$work/output"
 
 # Invalid Bash anywhere in the template must prevent previous commands executing.
 rm -f -- "$marker"
-printf 'effect=$(touch %q)\n{{ broken=(one }}\n' "$marker" >"$work/invalid.tpl"
+printf 'effect=$(touch %q)\n{{ broken=ok; ) }}\n' "$marker" >"$work/invalid.tpl"
 status=0
 bash "$root/shtpl" <"$work/invalid.tpl" >"$work/output" 2>"$work/stderr" || status=$?
 ((status == 2)) && [[ ! -e $marker ]] && [[ ! -s $work/output ]]
