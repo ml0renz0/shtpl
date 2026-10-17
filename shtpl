@@ -3,12 +3,21 @@
 set -euo pipefail
 
 usage() {
-  printf 'Usage: shtpl [--compile|--help] < template.tpl\n'
+  printf 'Usage: shtpl [--compile|--check|--help] < template.tpl\n'
+}
+
+record_lines() {
+  local count=$1 source=$2
+  while ((count > 0)); do
+    generated_sources+=("$source")
+    ((count -= 1))
+  done
 }
 
 compile() {
-  local line body lineno=0 top
-  local -a blocks=() else_seen=()
+  local line body lineno=0 top expected
+  local -a blocks=() else_seen=() open_lines=()
+  generated_sources=(0 0)
 
   printf '#!/usr/bin/env bash\nset -u\n'
 
@@ -20,56 +29,85 @@ compile() {
         body=${line#'{% if '}
         body=${body%' %}'}
         printf 'if [[ %s ]]; then\n:\n' "$body"
+        record_lines 2 "$lineno"
         blocks+=(if)
         else_seen+=(0)
+        open_lines+=("$lineno")
         ;;
       '{% for '*' %}')
         body=${line#'{% for '}
         body=${body%' %}'}
         printf 'for %s; do\n:\n' "$body"
+        record_lines 2 "$lineno"
         blocks+=(for)
         else_seen+=(0)
+        open_lines+=("$lineno")
         ;;
       '{% else %}')
         if (( ${#blocks[@]} == 0 )) || [[ ${blocks[-1]} != if ]]; then
-          printf 'shtpl: unexpected else at line %d\n' "$lineno" >&2
+          printf 'shtpl: unexpected else at line %d' "$lineno" >&2
+          if ((${#blocks[@]})); then
+            printf ' (inside %s opened at line %d)' "${blocks[-1]}" "${open_lines[-1]}" >&2
+          fi
+          printf '\n' >&2
           return 2
         fi
         top=$(( ${#blocks[@]} - 1 ))
         if (( else_seen[top] )); then
-          printf 'shtpl: duplicate else at line %d\n' "$lineno" >&2
+          printf 'shtpl: duplicate else at line %d (if opened at line %d)\n' "$lineno" "${open_lines[top]}" >&2
           return 2
         fi
         else_seen[top]=1
         printf 'else\n:\n'
+        record_lines 2 "$lineno"
         ;;
-      '{% endif %}')
-        [[ ${#blocks[@]} -gt 0 && ${blocks[-1]} == if ]] || { printf 'shtpl: unexpected endif at line %d\n' "$lineno" >&2; return 2; }
-        printf 'fi\n'
-        top=$(( ${#blocks[@]} - 1 ))
-        unset "blocks[$top]" "else_seen[$top]"
-        ;;
-      '{% endfor %}')
-        [[ ${#blocks[@]} -gt 0 && ${blocks[-1]} == for ]] || { printf 'shtpl: unexpected endfor at line %d\n' "$lineno" >&2; return 2; }
-        printf 'done\n'
-        top=$(( ${#blocks[@]} - 1 ))
-        unset "blocks[$top]" "else_seen[$top]"
+      '{% endif %}'|'{% endfor %}')
+        if [[ $line == '{% endif %}' ]]; then
+          expected=if
+        else
+          expected=for
+        fi
+        if ((${#blocks[@]} == 0)) || [[ ${blocks[-1]} != "$expected" ]]; then
+          if [[ $expected == if ]]; then
+            printf 'shtpl: unexpected endif at line %d' "$lineno" >&2
+          else
+            printf 'shtpl: unexpected endfor at line %d' "$lineno" >&2
+          fi
+          if ((${#blocks[@]})); then
+            printf ' (expected to close %s opened at line %d)' "${blocks[-1]}" "${open_lines[-1]}" >&2
+          fi
+          printf '\n' >&2
+          return 2
+        fi
+        if [[ $expected == if ]]; then
+          printf 'fi\n'
+        else
+          printf 'done\n'
+        fi
+        record_lines 1 "$lineno"
+        top=$((${#blocks[@]} - 1))
+        unset "blocks[$top]" "else_seen[$top]" "open_lines[$top]"
         ;;
       '{{ '*' }}')
         body=${line#'{{ '}
         body=${body%' }}'}
         if [[ $body =~ ^[a-zA-Z_][a-zA-Z_0-9]*= || $body =~ ^declare[[:space:]]+-[aA][[:space:]]+[a-zA-Z_][a-zA-Z_0-9]*= ]]; then
           printf '%s\n' "$body"
+          record_lines 1 "$lineno"
         else
           emit_text "$line" "$lineno"
         fi
+        ;;
+      '{%'*)
+        printf 'shtpl: invalid directive at line %d: %s\n' "$lineno" "$line" >&2
+        return 2
         ;;
       *) emit_text "$line" "$lineno" ;;
     esac
   done
 
   if (( ${#blocks[@]} )); then
-    printf 'shtpl: unclosed %s block\n' "${blocks[-1]}" >&2
+    printf 'shtpl: unclosed %s block opened at line %d (end of template at line %d)\n' "${blocks[-1]}" "${open_lines[-1]}" "$lineno" >&2
     return 2
   fi
 }
@@ -81,28 +119,62 @@ emit_text() {
   # Comments must be literal; other text is expanded only by generated Bash.
   if [[ $line =~ ^[[:space:]]*# ]]; then
     printf "cat <<'%s'\n%s\n%s\n" "$marker" "$line" "$marker"
+    record_lines 3 "$lineno"
   elif [[ $line == *\\ ]]; then
     # Protect the marker from a trailing backslash.
     printf '(\n__shtpl_line=$(cat <<%s\n%s.\n%s\n)\n' "$marker" "$line" "$marker"
     printf '%s\n' "printf '%s\n' \"\${__shtpl_line%.}\"" ')'
+    record_lines 7 "$lineno"
   else
     printf 'cat <<%s\n%s\n%s\n' "$marker" "$line" "$marker"
+    record_lines 3 "$lineno"
   fi
 }
 
-execute() (
-  local temp
+validate_bash() {
+  local script=$1 diagnostic=$2 entry generated_line source_line message
+  if bash -n "$script" 2>"$diagnostic"; then
+    return 0
+  fi
+
+  # Bash reports line numbers in generated code. Translate them to template
+  # lines, even when Bash points at an unexpected EOF just past the last line.
+  while IFS= read -r entry || [[ -n $entry ]]; do
+    if [[ $entry =~ line[[:space:]]+([0-9]+):[[:space:]]*(.*) ]]; then
+      generated_line=${BASH_REMATCH[1]}
+      message=${BASH_REMATCH[2]}
+      source_line=${generated_sources[generated_line-1]-}
+      if [[ -z $source_line ]]; then
+        source_line=${generated_sources[-1]-0}
+      fi
+      printf 'shtpl: invalid Bash syntax at template line %s (generated line %d): %s\n' "$source_line" "$generated_line" "$message" >&2
+      return 2
+    fi
+  done < "$diagnostic"
+
+  printf 'shtpl: generated Bash failed syntax validation\n' >&2
+  return 2
+}
+
+process_template() (
+  local mode=$1 temp
   temp=$(mktemp "${TMPDIR:-/tmp}/shtpl.XXXXXXXX")
-  trap 'rm -f -- "$temp"' EXIT
-  compile > "$temp"
-  bash "$temp"
+  trap 'rm -f -- "$temp" "$temp.errors"' EXIT
+  compile > "$temp" || return $?
+  validate_bash "$temp" "$temp.errors" || return $?
+  case $mode in
+    check) ;;
+    compile) cat -- "$temp" ;;
+    execute) bash "$temp" ;;
+  esac
 )
 
 main() {
   case ${1-} in
     --help|-h) usage ;;
-    --compile) [[ $# == 1 ]] || { usage >&2; return 2; }; compile ;;
-    '') execute ;;
+    --compile) [[ $# == 1 ]] || { usage >&2; return 2; }; process_template compile ;;
+    --check) [[ $# == 1 ]] || { usage >&2; return 2; }; process_template check ;;
+    '') [[ $# == 0 ]] || { usage >&2; return 2; }; process_template execute ;;
     *) usage >&2; return 2 ;;
   esac
 }
