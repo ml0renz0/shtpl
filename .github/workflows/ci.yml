@@ -86,4 +86,4 @@ jobs:
             --mount type=bind,source="${{ github.workspace }}",target=/project,readonly \
             --workdir /project \
             bash:4.4 \
-            bash tests/smoke.sh
+            sh -c "apk add --no-cache coreutils >/dev/null && bash tests/smoke.sh"
