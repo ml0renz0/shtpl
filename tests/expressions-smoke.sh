@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Fixture templates intentionally use single quotes to defer Bash expansion.
+# shellcheck disable=SC2016
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
