@@ -79,6 +79,7 @@ jobs:
           bash tests/nesting-smoke.sh
           bash tests/expressions-smoke.sh
           bash tests/diagnostics-smoke.sh
+          bash tests/security-smoke.sh
 
   bash-4:
     name: Legacy Bash 4.4 compatibility
@@ -92,4 +93,4 @@ jobs:
             --mount type=bind,source="${{ github.workspace }}",target=/project,readonly \
             --workdir /project \
             bash:4.4 \
-            sh -c "apk add --no-cache coreutils >/dev/null && bash tests/smoke.sh && bash tests/compile-smoke.sh && bash tests/nesting-smoke.sh && bash tests/expressions-smoke.sh && bash tests/diagnostics-smoke.sh"
+            sh -c "apk add --no-cache coreutils >/dev/null && bash tests/smoke.sh && bash tests/compile-smoke.sh && bash tests/nesting-smoke.sh && bash tests/expressions-smoke.sh && bash tests/diagnostics-smoke.sh && bash tests/security-smoke.sh"

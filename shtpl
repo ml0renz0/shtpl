@@ -156,18 +156,56 @@ validate_bash() {
   return 2
 }
 
-process_template() (
-  local mode=$1 temp
-  temp=$(mktemp "${TMPDIR:-/tmp}/shtpl.XXXXXXXX")
-  trap 'rm -f -- "$temp" "$temp.errors"' EXIT
-  compile > "$temp" || return $?
-  validate_bash "$temp" "$temp.errors" || return $?
+workdir= child_pid=
+
+# Each invocation owns a private workspace.  In particular, the diagnostics
+# file must not be created next to a predictable public /tmp filename.
+cleanup_workspace() {
+  if [[ -n ${workdir-} ]]; then
+    rm -rf -- "$workdir"
+  fi
+}
+
+handle_signal() {
+  local exit_code=$1
+  trap - HUP INT TERM
+  if [[ -n ${child_pid-} ]]; then
+    # A signal sent only to the wrapper must also stop the template runner.
+    kill -TERM "$child_pid" 2>/dev/null || :
+    wait "$child_pid" 2>/dev/null || :
+    child_pid=
+  fi
+  exit "$exit_code"
+}
+
+process_template() {
+  local mode=$1 script diagnostic status=0
+  umask 077
+  workdir=$(mktemp -d -- "${TMPDIR:-/tmp}/shtpl.XXXXXXXX") || {
+    printf 'shtpl: cannot create temporary workspace\n' >&2
+    return 1
+  }
+  script=$workdir/generated.sh
+  diagnostic=$workdir/diagnostics
+  trap 'cleanup_workspace' EXIT
+  trap 'handle_signal 129' HUP
+  trap 'handle_signal 130' INT
+  trap 'handle_signal 143' TERM
+
+  compile > "$script" || return $?
+  validate_bash "$script" "$diagnostic" || return $?
   case $mode in
     check) ;;
-    compile) cat -- "$temp" ;;
-    execute) bash "$temp" ;;
+    compile) cat -- "$script" ;;
+    execute)
+      bash "$script" &
+      child_pid=$!
+      wait "$child_pid" || status=$?
+      child_pid=
+      return "$status"
+      ;;
   esac
-)
+}
 
 main() {
   case ${1-} in
