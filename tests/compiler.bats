@@ -1,11 +1,11 @@
 #!/usr/bin/env bats
 
 @test "compilation does not execute template commands" {
-  marker="$BATS_TEST_DIRNAME/../compile-effect-$"
-  template="$BATS_TEST_DIRNAME/../compile-effect-$.tpl"
-  generated="$BATS_TEST_DIRNAME/../compiled-$.sh"
-
-  trap 'rm -f -- "$marker" "$template" "$generated"' RETURN
+  workdir="$(mktemp -d)"
+  trap 'rm -rf -- "$workdir"' EXIT
+  marker="$workdir/compile-effect"
+  template="$workdir/compile-effect.tpl"
+  generated="$workdir/compiled.sh"
   printf 'value=$(touch %q; printf OK)\n' "$marker" > "$template"
   run bash "$BATS_TEST_DIRNAME/../shtpl" --compile < "$template"
   [ "$status" -eq 0 ]
