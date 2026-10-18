@@ -31,8 +31,9 @@ elif ! grep -Fqx "## $version" CHANGELOG.md; then
     done < <(git tag --merged HEAD --list 'v*' --sort=-version:refname)
     count=0
     if [[ -n $latest ]]; then
+      commit_pattern='^(feat|fix|perf|refactor)(\([^)]*\))?(!)?:'
       while IFS= read -r subject; do
-        if [[ $subject =~ ^(feat|fix|perf|refactor)(\([^)]*\))?(!)?: ]]; then
+        if [[ $subject =~ $commit_pattern ]]; then
           printf -- '- %s\n' "$subject"
           ((count += 1))
         fi
