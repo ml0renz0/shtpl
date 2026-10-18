@@ -27,15 +27,15 @@ for size in 128 1024 4096; do
       output="$work/output"
       timings="$work/time"
       case $mode in
-        check)
-          /usr/bin/time -f '%e,%M' -o "$timings" bash "$root/shtpl" --check -i "$template" >"$output"
-          ;;
-        compile)
-          /usr/bin/time -f '%e,%M' -o "$timings" bash "$root/shtpl" --compile -i "$template" >"$output"
-          ;;
-        render)
-          /usr/bin/time -f '%e,%M' -o "$timings" bash "$root/shtpl" -i "$template" >"$output"
-          ;;
+      check)
+        /usr/bin/time -f '%e,%M' -o "$timings" bash "$root/shtpl" --check -i "$template" >"$output"
+        ;;
+      compile)
+        /usr/bin/time -f '%e,%M' -o "$timings" bash "$root/shtpl" --compile -i "$template" >"$output"
+        ;;
+      render)
+        /usr/bin/time -f '%e,%M' -o "$timings" bash "$root/shtpl" -i "$template" >"$output"
+        ;;
       esac
       printf '%s,%s,%d,%s,%s\n' "$size" "$mode" "$iteration" "$(cat "$timings")" "$(wc -c <"$output" | tr -d ' ')"
     done
