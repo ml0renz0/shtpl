@@ -1,4 +1,4 @@
-# shtpl v2 — SHell TemPLating
+# shtpl — SHell TemPLating
 
 A compact Jinja-inspired template-to-Bash compiler for **trusted** templates.
 Supports nested conditionals and loops, Bash expansions, static validation,
@@ -24,5 +24,5 @@ any template expressions. Default rendering executes Bash expressions;
     install -m 755 shtpl "$HOME/.local/bin/shtpl"
 
 Requires Bash 4.4+ and GNU coreutils. See [compiler reference](docs/COMPILER.md),
-[release process](docs/RELEASE.md), [changelog](CHANGELOG.md), and
+[automated releases](docs/RELEASE.md), [changelog](CHANGELOG.md), and
 [original sample template](shtpl.test).

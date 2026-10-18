@@ -7,7 +7,7 @@ work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 tool="$root/shtpl"
 printf '%s\n' 'hello from file' >"$work/input.tpl"
-[[ $(bash "$tool" --version) == 'shtpl 2.0.0' ]]
+[[ $(bash "$tool" --version) == "shtpl $(sed -n 's/^SHTPL_VERSION=//p' "$tool")" ]]
 bash "$tool" --help | grep -q -- '--output FILE'
 bash "$tool" -i "$work/input.tpl" -o "$work/output"
 cmp "$work/input.tpl" "$work/output"

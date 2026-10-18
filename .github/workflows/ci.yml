@@ -27,17 +27,17 @@ jobs:
       - name: Bash syntax
         run: |
           bash -n shtpl
-          for file in tests/*.sh; do
+          for file in tests/*.sh scripts/*.sh; do
             bash -n "$file"
           done
       - name: ShellCheck new test scripts
-        run: shellcheck -s bash tests/*.sh
+        run: shellcheck -s bash tests/*.sh scripts/*.sh
       - name: shfmt new test scripts
         run: |
-          files="$(shfmt -ln bash -i 2 -l tests/*.sh)"
+          files="$(shfmt -ln bash -i 2 -l tests/*.sh scripts/*.sh)"
           if [[ -n "$files" ]]; then
             printf 'Files need formatting:\n%s\n' "$files"
-            shfmt -ln bash -i 2 -d tests/*.sh
+            shfmt -ln bash -i 2 -d tests/*.sh scripts/*.sh
             exit 1
           fi
       - name: Snapshot legacy lint debt (non-blocking)
@@ -82,6 +82,7 @@ jobs:
           bash tests/security-smoke.sh
           bash tests/cli-smoke.sh
           bash tests/release-smoke.sh
+          bash tests/versioning-smoke.sh
 
   bash-4:
     name: Legacy Bash 4.4 compatibility
