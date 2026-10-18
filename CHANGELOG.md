@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- fix(f09): repair vars-file parser and Bash syntax
+- feat(language): add elif, recursive includes and external variable inputs
+
+
 ## 1.0.1
 
 - fix(f08): close benchmark input check with fi

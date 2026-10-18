@@ -2,7 +2,7 @@
 # shtpl: compile trusted templates into Bash, then optionally execute them.
 set -euo pipefail
 
-SHTPL_VERSION=1.0.1
+SHTPL_VERSION=1.1.0
 
 usage() {
   cat <<'USAGE'
