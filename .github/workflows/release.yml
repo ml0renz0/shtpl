@@ -29,10 +29,22 @@ jobs:
 
       - name: Calculate next version
         id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           tag=$(bash scripts/next-version.sh)
+          # A previous run may have pushed its tag but failed to publish the
+          # GitHub Release. Retry that tag instead of silently skipping it.
+          if [[ -z "$tag" ]]; then
+            current="v$(bash shtpl --version)"
+            current=${current#vshtpl }
+            if git rev-parse -q --verify "refs/tags/$current" >/dev/null &&
+              ! gh release view "$current" >/dev/null 2>&1; then
+              tag=$current
+            fi
+          fi
           if [[ -n "$tag" ]]; then
             printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
             printf 'release=true\n' >>"$GITHUB_OUTPUT"
@@ -93,8 +105,13 @@ jobs:
         run: |
           set -euo pipefail
           git push origin HEAD:main
-          git tag -a "$RELEASE_TAG" -m "shtpl $RELEASE_TAG"
-          git push origin "$RELEASE_TAG"
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            [[ $(git rev-list -n 1 "refs/tags/$RELEASE_TAG") == "$(git rev-parse HEAD)" ]] ||
+              { printf 'Release tag points to a different commit\n' >&2; exit 1; }
+          else
+            git tag -a "$RELEASE_TAG" -m "shtpl $RELEASE_TAG"
+            git push origin "$RELEASE_TAG"
+          fi
 
       - name: Package and publish GitHub Release
         if: steps.version.outputs.release == 'true'
