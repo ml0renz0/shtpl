@@ -36,11 +36,8 @@ jobs:
           for test in tests/*-smoke.sh tests/smoke.sh; do
             bash "$test"
           done
-          version="${GITHUB_REF_NAME#v}"
-          mkdir -p dist
-          git archive --format=tar --prefix="shtpl-$version/" HEAD shtpl README.md LICENSE docs CHANGELOG.md |
-            gzip -n -9 > "dist/shtpl-$version.tar.gz"
-          (cd dist && sha256sum "shtpl-$version.tar.gz" > SHA256SUMS)
+          bash tests/release-smoke.sh
+          bash scripts/package-release.sh "$GITHUB_REF_NAME" dist
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

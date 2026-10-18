@@ -81,6 +81,7 @@ jobs:
           bash tests/diagnostics-smoke.sh
           bash tests/security-smoke.sh
           bash tests/cli-smoke.sh
+          bash tests/release-smoke.sh
 
   bash-4:
     name: Legacy Bash 4.4 compatibility
