@@ -170,7 +170,8 @@ for ((case_index = 1; case_index <= cases; case_index++)); do
 
   if ((case_index % 5 == 0)); then
     cp -- "$input" "$work/invalid.tpl"
-    # Ensure malformed directive starts on its own line even with no final EOL.\n    printf '\n{%% endfor %%}\n' >>"$work/invalid.tpl"
+    # Ensure malformed directive starts on its own line even with no final EOL.
+    printf '\n{%% endfor %%}\n' >>"$work/invalid.tpl"
     status=0
     bash "$root/shtpl" --compile -i "$work/invalid.tpl" >"$work/invalid.stdout" 2>"$work/invalid.stderr" || status=$?
     ((status == 2))
