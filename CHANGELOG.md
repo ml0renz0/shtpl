@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+- feat(f10): raw literals, required variables, strict values and include diagnostics
+
+
 ## 1.1.0
 
 - fix(f09): repair vars-file parser and Bash syntax
