@@ -10,6 +10,7 @@ and execution with legacy stdin compatibility.
     shtpl -i template.tpl -o rendered.txt
     shtpl --check -i template.tpl
     shtpl --compile -i template.tpl -o generated.sh
+    shtpl -i template.tpl --vars-file config.vars --var NAME=override
     shtpl --help
     shtpl --version
 
@@ -23,6 +24,6 @@ any template expressions. Default rendering executes Bash expressions;
 
     install -m 755 shtpl "$HOME/.local/bin/shtpl"
 
-Requires Bash 4.4+ and GNU coreutils. See [compiler reference](docs/COMPILER.md),
+Requires Bash 4.4+ and GNU coreutils. See [language and variables](docs/LANGUAGE.md), [compiler reference](docs/COMPILER.md),
 [automated releases](docs/RELEASE.md), [changelog](CHANGELOG.md), and
 [original sample template](shtpl.test).
