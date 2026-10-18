@@ -22,6 +22,15 @@ expected=$work/expected
 generated=$work/generated.sh
 actual=$work/actual
 
+assert_equal() {
+  local wanted=$1 got=$2 stage=$3
+  if ! cmp -s "$wanted" "$got"; then
+    printf 'F08: mismatch in %s\n' "$stage" >&2
+    diff -u "$wanted" "$got" >&2 || :
+    return 1
+  fi
+}
+
 cleanup() {
   local status=$?
   if ((status != 0)); then
@@ -73,8 +82,8 @@ leaf() {
       printf '%s\n' 'literal=$name' >>"$target"
       ;;
     7)
-      printf '%s\n' 'trailing=\' >>"$input"
-      printf '%s\n' 'trailing=\' >>"$target"
+      printf '%s\n' "trailing=\\" >>"$input"
+      printf '%s\n' "trailing=\\" >>"$target"
       ;;
     8)
       printf '%s\n' '__SHTPL_00000001__' >>"$input"
@@ -161,7 +170,7 @@ for ((case_index = 1; case_index <= cases; case_index++)); do
 
   if ((case_index % 5 == 0)); then
     cp -- "$input" "$work/invalid.tpl"
-    printf '{%% endfor %%}\n' >>"$work/invalid.tpl"
+    # Ensure malformed directive starts on its own line even with no final EOL.\n    printf '\n{%% endfor %%}\n' >>"$work/invalid.tpl"
     status=0
     bash "$root/shtpl" --compile -i "$work/invalid.tpl" >"$work/invalid.stdout" 2>"$work/invalid.stderr" || status=$?
     ((status == 2))
