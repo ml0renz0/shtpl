@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1
+
+- fix(f08): close benchmark input check with fi
+- fix(f08): separate comment from malformed directive generation
+- fix(f08): make benchmark repetitions validation ShellCheck clean
+- fix(f08): preserve newline boundary for malformed cases and improve mismatch diagnostics
+- fix(ci): correct smoke step indentation and benchmark markdown fences
+- perf(f08): add measured compile and render benchmarks
+
+
 ## 1.0.0
 
 - Bash compiler with arbitrary nested conditions and loops.
