@@ -1,48 +1,111 @@
 name: Release
 
+# PR validation runs in ci.yml; only integration into trunk can publish.
 on:
   push:
-    tags:
-      - 'v[0-9]*.[0-9]*.[0-9]*'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: shtpl-release-main
+  cancel-in-progress: false
+
 jobs:
   release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Verify release tag and source
+
+      - name: Fetch release tags
+        run: git fetch --force origin main --tags
+
+      - name: Calculate next version
+        id: version
         shell: bash
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-          [[ "$(bash shtpl --version)" == "shtpl ${tag#v}" ]]
-          git fetch origin main
-          git merge-base --is-ancestor HEAD origin/main
-      - name: Test and package
+          tag=$(bash scripts/next-version.sh)
+          if [[ -n "$tag" ]]; then
+            printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
+            printf 'release=true\n' >>"$GITHUB_OUTPUT"
+            printf 'Preparing %s\n' "$tag"
+          else
+            printf 'No releasable changes since latest tag\n'
+          fi
+
+      - name: Prepare version files
+        if: steps.version.outputs.release == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: bash scripts/prepare-release.sh "$RELEASE_TAG"
+
+      - name: Commit version bump locally
+        if: steps.version.outputs.release == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- shtpl CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): $RELEASE_TAG"
+          fi
+
+      - name: Validate release candidate
+        if: steps.version.outputs.release == 'true'
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y bats
+          sudo apt-get install -y bats shellcheck shfmt
           bash -n shtpl
+          for file in tests/*.sh scripts/*.sh; do
+            bash -n "$file"
+          done
+          shellcheck -s bash tests/*.sh scripts/*.sh
+          files=$(shfmt -ln bash -i 2 -l tests/*.sh scripts/*.sh)
+          if [[ -n "$files" ]]; then
+            printf 'Files need formatting:\n%s\n' "$files"
+            exit 1
+          fi
           bats tests/baseline.bats tests/known-issues.bats tests/compiler.bats
-          for test in tests/*-smoke.sh tests/smoke.sh; do
+          bash tests/smoke.sh
+          for test in tests/*-smoke.sh; do
             bash "$test"
           done
-          bash tests/release-smoke.sh
-          bash scripts/package-release.sh "$GITHUB_REF_NAME" dist
-      - name: Publish GitHub Release
+
+      - name: Publish validated commit and tag
+        if: steps.version.outputs.release == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main
+          git tag -a "$RELEASE_TAG" -m "shtpl $RELEASE_TAG"
+          git push origin "$RELEASE_TAG"
+
+      - name: Package and publish GitHub Release
+        if: steps.version.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --title "shtpl $GITHUB_REF_NAME" \
+          set -euo pipefail
+          bash scripts/package-release.sh "$RELEASE_TAG" dist
+          gh release create "$RELEASE_TAG" dist/* \
+            --title "shtpl $RELEASE_TAG" \
             --generate-notes \
             --verify-tag
