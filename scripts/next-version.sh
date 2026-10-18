@@ -46,9 +46,16 @@ while IFS= read -r line; do
 done < <(git -C "$root" log --format=%B "$latest..HEAD")
 
 case $level in
-  3) ((major += 1)); minor=0; patch=0 ;;
-  2) ((minor += 1)); patch=0 ;;
-  1) ((patch += 1)) ;;
-  0) exit 0 ;;
+3)
+  ((major += 1))
+  minor=0
+  patch=0
+  ;;
+2)
+  ((minor += 1))
+  patch=0
+  ;;
+1) ((patch += 1)) ;;
+0) exit 0 ;;
 esac
 printf 'v%d.%d.%d\n' "$major" "$minor" "$patch"
