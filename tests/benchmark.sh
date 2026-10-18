@@ -15,7 +15,7 @@ repetitions=${SHTPL_BENCH_REPETITIONS:-3}
 if [[ ! $repetitions =~ ^[1-9][0-9]*$ ]] || ((repetitions > 20)); then
   printf 'F08: repetitions must be 1..20\n' >&2
   exit 2
-}
+fi
 printf 'environment: %s\n' "$(bash --version | head -n 1)"
 printf 'case,mode,iteration,wall_seconds,max_rss_kb,output_bytes\n'
 
