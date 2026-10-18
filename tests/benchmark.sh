@@ -12,7 +12,7 @@ command -v /usr/bin/time >/dev/null 2>&1 || {
 }
 
 repetitions=${SHTPL_BENCH_REPETITIONS:-3}
-[[ $repetitions =~ ^[1-9][0-9]*$ ]] && ((repetitions <= 20)) || {
+if [[ ! $repetitions =~ ^[1-9][0-9]*$ ]] || ((repetitions > 20)); then
   printf 'F08: repetitions must be 1..20\n' >&2
   exit 2
 }
