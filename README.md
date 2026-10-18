@@ -1,4 +1,4 @@
-# shtpl v2 — SHell TemPLating
+# shtpl — SHell TemPLating
 
 A compact Jinja-inspired template-to-Bash compiler for **trusted** templates.
 Supports nested conditionals and loops, Bash expansions, static validation,
