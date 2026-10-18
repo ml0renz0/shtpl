@@ -24,5 +24,5 @@ fi
 
 mkdir -p -- "$dist_dir"
 git archive --format=tar --prefix="shtpl-$version/" HEAD shtpl README.md LICENSE docs CHANGELOG.md |
-  gzip -n -9 > "$dist_dir/shtpl-$version.tar.gz"
-(cd -- "$dist_dir" && sha256sum "shtpl-$version.tar.gz" > SHA256SUMS)
+  gzip -n -9 >"$dist_dir/shtpl-$version.tar.gz"
+(cd -- "$dist_dir" && sha256sum "shtpl-$version.tar.gz" >SHA256SUMS)
