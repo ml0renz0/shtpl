@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 (pending release tag)
+## 1.0.0
 
 - Bash compiler with arbitrary nested conditions and loops.
 - Static validation, source-aware diagnostics, and private temporary workspace.
