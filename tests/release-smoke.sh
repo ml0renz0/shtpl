@@ -26,7 +26,7 @@ done
 [[ -x "$package/shtpl" ]]
 [[ ! -e "$package/tests" ]]
 [[ $(bash "$package/shtpl" --version) == "shtpl $version" ]]
-printf '%s\n' 'release smoke' | bash "$package/shtpl" > "$work/rendered"
+printf '%s\n' 'release smoke' | bash "$package/shtpl" >"$work/rendered"
 grep -qx 'release smoke' "$work/rendered"
 
 for invalid in 'v01.2.3' 'v0.0.0-not-a-release' 'not-a-tag'; do
