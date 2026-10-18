@@ -370,7 +370,17 @@ load_vars_file() {
   fi
   while IFS= read -r line || [[ -n $line ]]; do
     ((number += 1))
-    [[ $line != *
+    if [[ $line =~ ^[[:space:]]*$ ]] || [[ $line =~ ^[[:space:]]*\# ]]; then
+      continue
+    fi
+    set_variable "$line" "$file:$number" || return $?
+  done < "$file"
+}
+main() {
+  local mode=execute input_file=- output_file=- mode_set=0 input_set=0 output_set=0
+  local option value file spec
+  local -a var_files=() var_specs=() variable_names=()
+  local -A variable_values=()
   while (($#)); do
     case $1 in
       --help|-h)
@@ -448,150 +458,6 @@ load_vars_file() {
   for spec in "${var_specs[@]}"; do
     set_variable "$spec" '--var' || return $?
   done
-  process_template "$mode" "$input_file" "$output_file"
-}
-
-main "$@"
-\r' ]] || line=${line%
-  while (($#)); do
-    case $1 in
-      --help|-h)
-        (($# == 1)) || { cli_error '--help cannot be combined with other options'; return 2; }
-        usage
-        return 0
-        ;;
-      --version)
-        (($# == 1)) || { cli_error '--version cannot be combined with other options'; return 2; }
-        printf 'shtpl %s\n' "$SHTPL_VERSION"
-        return 0
-        ;;
-      --compile|--check)
-        ((mode_set == 0)) || { cli_error 'choose only one mode'; return 2; }
-        mode=${1#--}
-        mode_set=1
-        shift
-        ;;
-      -i|--input|-o|--output)
-        option=$1
-        (($# >= 2)) && [[ -n $2 ]] || { cli_error "missing value for $option"; return 2; }
-        value=$2
-        shift 2
-        case $option in
-          -i|--input)
-            ((input_set == 0)) || { cli_error 'duplicate --input'; return 2; }
-            input_file=$value
-            input_set=1
-            ;;
-          -o|--output)
-            ((output_set == 0)) || { cli_error 'duplicate --output'; return 2; }
-            output_file=$value
-            output_set=1
-            ;;
-        esac
-        ;;
-      --input=*|--output=*)
-        option=${1%%=*}
-        value=${1#*=}
-        [[ -n $value ]] || { cli_error "missing value for $option"; return 2; }
-        shift
-        if [[ $option == --input ]]; then
-          ((input_set == 0)) || { cli_error 'duplicate --input'; return 2; }
-          input_file=$value
-          input_set=1
-        else
-          ((output_set == 0)) || { cli_error 'duplicate --output'; return 2; }
-          output_file=$value
-          output_set=1
-        fi
-        ;;
-      *)
-        cli_error "unknown argument: $1"
-        return 2
-        ;;
-    esac
-  done
-  if [[ $mode == check && $output_set == 1 ]]; then
-    cli_error '--check does not accept --output'
-    return 2
-  fi
-  process_template "$mode" "$input_file" "$output_file"
-}
-
-main "$@"
-\r'}
-    if [[ $line =~ ^[[:space:]]*$ || $line =~ ^[[:space:]]*# ]]; then
-      continue
-    fi
-    set_variable "$line" "$file:$number" || return $?
-  done < "$file"
-}
-
-main() {
-  local mode=execute input_file=- output_file=- mode_set=0 input_set=0 output_set=0
-  local option value file spec
-  local -a var_files=() var_specs=() variable_names=()
-  local -A variable_values=()
-  while (($#)); do
-    case $1 in
-      --help|-h)
-        (($# == 1)) || { cli_error '--help cannot be combined with other options'; return 2; }
-        usage
-        return 0
-        ;;
-      --version)
-        (($# == 1)) || { cli_error '--version cannot be combined with other options'; return 2; }
-        printf 'shtpl %s\n' "$SHTPL_VERSION"
-        return 0
-        ;;
-      --compile|--check)
-        ((mode_set == 0)) || { cli_error 'choose only one mode'; return 2; }
-        mode=${1#--}
-        mode_set=1
-        shift
-        ;;
-      -i|--input|-o|--output)
-        option=$1
-        (($# >= 2)) && [[ -n $2 ]] || { cli_error "missing value for $option"; return 2; }
-        value=$2
-        shift 2
-        case $option in
-          -i|--input)
-            ((input_set == 0)) || { cli_error 'duplicate --input'; return 2; }
-            input_file=$value
-            input_set=1
-            ;;
-          -o|--output)
-            ((output_set == 0)) || { cli_error 'duplicate --output'; return 2; }
-            output_file=$value
-            output_set=1
-            ;;
-        esac
-        ;;
-      --input=*|--output=*)
-        option=${1%%=*}
-        value=${1#*=}
-        [[ -n $value ]] || { cli_error "missing value for $option"; return 2; }
-        shift
-        if [[ $option == --input ]]; then
-          ((input_set == 0)) || { cli_error 'duplicate --input'; return 2; }
-          input_file=$value
-          input_set=1
-        else
-          ((output_set == 0)) || { cli_error 'duplicate --output'; return 2; }
-          output_file=$value
-          output_set=1
-        fi
-        ;;
-      *)
-        cli_error "unknown argument: $1"
-        return 2
-        ;;
-    esac
-  done
-  if [[ $mode == check && $output_set == 1 ]]; then
-    cli_error '--check does not accept --output'
-    return 2
-  fi
   process_template "$mode" "$input_file" "$output_file"
 }
 
