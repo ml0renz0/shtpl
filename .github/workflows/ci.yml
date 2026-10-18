@@ -83,6 +83,7 @@ jobs:
           bash tests/cli-smoke.sh
           bash tests/release-smoke.sh
           bash tests/versioning-smoke.sh
+          bash tests/advanced-smoke.sh
 
   bash-4:
     name: Legacy Bash 4.4 compatibility
@@ -96,4 +97,31 @@ jobs:
             --mount type=bind,source="${{ github.workspace }}",target=/project,readonly \
             --workdir /project \
             bash:4.4 \
-            sh -c "apk add --no-cache coreutils >/dev/null && bash tests/smoke.sh && bash tests/compile-smoke.sh && bash tests/nesting-smoke.sh && bash tests/expressions-smoke.sh && bash tests/diagnostics-smoke.sh && bash tests/security-smoke.sh && bash tests/cli-smoke.sh"
+            sh -c "apk add --no-cache coreutils >/dev/null && bash tests/smoke.sh && bash tests/compile-smoke.sh && bash tests/nesting-smoke.sh && bash tests/expressions-smoke.sh && bash tests/diagnostics-smoke.sh && bash tests/security-smoke.sh && bash tests/cli-smoke.sh && bash tests/advanced-smoke.sh"
+
+  performance:
+    name: Informative performance benchmark
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GNU time
+        run: sudo apt-get update && sudo apt-get install -y time
+      - name: Measure compile and render performance
+        run: |
+          bash tests/benchmark.sh > benchmark.csv
+          cat benchmark.csv
+          {
+            echo '## shtpl F08 performance (informative)'
+            echo
+            echo 'Measurements include runner noise; no fixed pass/fail thresholds.'
+            echo
+            echo '\`\`\`csv'
+            cat benchmark.csv
+            echo '\`\`\`'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          path: benchmark.csv
+          retention-days: 14
