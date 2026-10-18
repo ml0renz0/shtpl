@@ -7,6 +7,7 @@ SHTPL_VERSION=1.0.1
 usage() {
   cat <<'USAGE'
 Usage: shtpl [--compile|--check] [--input FILE] [--output FILE]
+             [--vars-file FILE]... [--var NAME=VALUE]...
        shtpl --help
        shtpl --version
 
@@ -17,6 +18,8 @@ Modes (default: render the template):
 Options:
   -i, --input FILE    Read from FILE (default: - for standard input)
   -o, --output FILE   Write to FILE (default: - for standard output)
+  --vars-file FILE    Load literal KEY=value entries (repeatable)
+  --var NAME=VALUE    Override one variable (repeatable, takes precedence)
   -h, --help          Show this help
   --version           Show the version
 
@@ -35,16 +38,28 @@ record_lines() {
   local count=$1 source=$2
   while ((count > 0)); do
     generated_sources+=("$source")
+    generated_files+=("${current_source--}")
     ((count -= 1))
   done
 }
 
 compile() {
-  local line body lineno=0 top expected
-  local -a blocks=() else_seen=() open_lines=()
+  local name
   generated_sources=(0 0)
-
+  generated_files=(- -)
+  include_stack=("$1")
   printf '#!/usr/bin/env bash\nset -u\n'
+  # %q produces Bash literals; no variable value is interpreted as code.
+  for name in "${variable_names[@]}"; do
+    printf '%s=%q\n' "$name" "${variable_values[$name]}"
+    record_lines 1 0
+  done
+  compile_source "$1"
+}
+
+compile_source() {
+  local current_source=$1 line body lineno=0 top expected base_dir candidate resolved visited
+  local -a blocks=() else_seen=() open_lines=()
 
   while IFS= read -r line || [[ -n $line ]]; do
     ((lineno += 1))
@@ -59,6 +74,21 @@ compile() {
         else_seen+=(0)
         open_lines+=("$lineno")
         ;;
+      '{% elif '*' %}')
+        body=${line#'{% elif '}
+        body=${body%' %}'}
+        if ((${#blocks[@]} == 0)) || [[ ${blocks[-1]} != if ]]; then
+          printf 'shtpl: unexpected elif at line %d in %s\n' "$lineno" "$current_source" >&2
+          return 2
+        fi
+        top=$((${#blocks[@]} - 1))
+        if ((else_seen[top])); then
+          printf 'shtpl: elif after else at line %d in %s (if opened at line %d)\n' "$lineno" "$current_source" "${open_lines[top]}" >&2
+          return 2
+        fi
+        printf 'elif [[ %s ]]; then\n:\n' "$body"
+        record_lines 2 "$lineno"
+        ;;
       '{% for '*' %}')
         body=${line#'{% for '}
         body=${body%' %}'}
@@ -67,6 +97,35 @@ compile() {
         blocks+=(for)
         else_seen+=(0)
         open_lines+=("$lineno")
+        ;;
+      '{% include "'*'" %}')
+        body=${line#'{% include "'}
+        body=${body%'" %}'}
+        if [[ -z $body || $body == *'"'* ]]; then
+          printf 'shtpl: invalid include at line %d in %s\n' "$lineno" "$current_source" >&2
+          return 2
+        fi
+        base_dir=.
+        [[ $current_source == - ]] || base_dir=$(dirname -- "$current_source")
+        candidate=$body
+        [[ $candidate == /* ]] || candidate=$base_dir/$candidate
+        if ! resolved=$(realpath -e -- "$candidate" 2>/dev/null) || [[ ! -f $resolved || ! -r $resolved ]]; then
+          printf 'shtpl: include not found at line %d in %s: %s\n' "$lineno" "$current_source" "$body" >&2
+          return 2
+        fi
+        for visited in "${include_stack[@]}"; do
+          if [[ $visited == "$resolved" ]]; then
+            printf 'shtpl: include cycle at line %d in %s: %s\n' "$lineno" "$current_source" "$resolved" >&2
+            return 2
+          fi
+        done
+        if ((${#include_stack[@]} >= 64)); then
+          printf 'shtpl: include nesting exceeds 64 files at line %d in %s\n' "$lineno" "$current_source" >&2
+          return 2
+        fi
+        include_stack+=("$resolved")
+        compile_source "$resolved" < "$resolved" || return $?
+        unset "include_stack[$((${#include_stack[@]} - 1))]"
         ;;
       '{% else %}')
         if (( ${#blocks[@]} == 0 )) || [[ ${blocks[-1]} != if ]]; then
@@ -124,7 +183,7 @@ compile() {
         fi
         ;;
       '{%'*)
-        printf 'shtpl: invalid directive at line %d: %s\n' "$lineno" "$line" >&2
+        printf 'shtpl: invalid directive at line %d in %s: %s\n' "$lineno" "$current_source" "$line" >&2
         return 2
         ;;
       *) emit_text "$line" "$lineno" ;;
@@ -132,7 +191,7 @@ compile() {
   done
 
   if (( ${#blocks[@]} )); then
-    printf 'shtpl: unclosed %s block opened at line %d (end of template at line %d)\n' "${blocks[-1]}" "${open_lines[-1]}" "$lineno" >&2
+    printf 'shtpl: unclosed %s block opened at line %d in %s (end of template at line %d)\n' "${blocks[-1]}" "${open_lines[-1]}" "$current_source" "$lineno" >&2
     return 2
   fi
 }
@@ -169,10 +228,16 @@ validate_bash() {
       generated_line=${BASH_REMATCH[1]}
       message=${BASH_REMATCH[2]}
       source_line=${generated_sources[generated_line-1]-}
+      source_file=${generated_files[generated_line-1]--}
       if [[ -z $source_line ]]; then
         source_line=${generated_sources[-1]-0}
+        source_file=${generated_files[-1]--}
       fi
-      printf 'shtpl: invalid Bash syntax at template line %s (generated line %d): %s\n' "$source_line" "$generated_line" "$message" >&2
+      if [[ $source_file == - ]]; then
+        printf 'shtpl: invalid Bash syntax at template line %s (generated line %d): %s\n' "$source_line" "$generated_line" "$message" >&2
+      else
+        printf 'shtpl: invalid Bash syntax at template line %s in %s (generated line %d): %s\n' "$source_line" "$source_file" "$generated_line" "$message" >&2
+      fi
       return 2
     fi
   done < "$diagnostic"
@@ -213,7 +278,14 @@ run_generated() {
 }
 
 process_template() {
-  local mode=$1 input_file=$2 output_file=$3 script diagnostic parent
+  local mode=$1 input_file=$2 output_file=$3 script diagnostic parent root_source
+  root_source=$input_file
+  if [[ $input_file != - ]]; then
+    root_source=$(realpath -e -- "$input_file") || {
+      printf 'shtpl: cannot resolve input: %s\n' "$input_file" >&2
+      return 1
+    }
+  fi
   umask 077
   workdir=$(mktemp -d -- "${TMPDIR:-/tmp}/shtpl.XXXXXXXX") || {
     printf 'shtpl: cannot create temporary workspace\n' >&2
@@ -227,9 +299,9 @@ process_template() {
   trap 'handle_signal 143' TERM
 
   if [[ $input_file == - ]]; then
-    compile > "$script" || return $?
+    compile "$root_source" > "$script" || return $?
   else
-    compile < "$input_file" > "$script" || return $?
+    compile "$root_source" < "$input_file" > "$script" || return $?
   fi
   validate_bash "$script" "$diagnostic" || return $?
   if [[ $mode == check ]]; then
@@ -272,9 +344,43 @@ process_template() {
   fi
 }
 
+set_variable() {
+  local entry=$1 origin=$2 name value
+  if [[ $entry != *=* ]]; then
+    printf 'shtpl: invalid variable in %s: expected KEY=value\n' "$origin" >&2
+    return 2
+  fi
+  name=${entry%%=*}
+  value=${entry#*=}
+  if [[ ! $name =~ ^[a-zA-Z_][a-zA-Z_0-9]*$ ]]; then
+    printf 'shtpl: invalid variable name in %s: %s\n' "$origin" "$name" >&2
+    return 2
+  fi
+  if [[ ! ${variable_values[$name]+exists} ]]; then
+    variable_names+=("$name")
+  fi
+  variable_values["$name"]=$value
+}
+
+load_vars_file() {
+  local file=$1 line number=0
+  if [[ $file == - || ! -f $file || ! -r $file ]]; then
+    printf 'shtpl: cannot read vars file: %s\n' "$file" >&2
+    return 2
+  fi
+  while IFS= read -r line || [[ -n $line ]]; do
+    ((number += 1))
+    if [[ $line =~ ^[[:space:]]*$ ]] || [[ $line =~ ^[[:space:]]*\# ]]; then
+      continue
+    fi
+    set_variable "$line" "$file:$number" || return $?
+  done < "$file"
+}
 main() {
   local mode=execute input_file=- output_file=- mode_set=0 input_set=0 output_set=0
-  local option value
+  local option value file spec
+  local -a var_files=() var_specs=() variable_names=()
+  local -A variable_values=()
   while (($#)); do
     case $1 in
       --help|-h)
@@ -293,7 +399,7 @@ main() {
         mode_set=1
         shift
         ;;
-      -i|--input|-o|--output)
+      -i|--input|-o|--output|--vars-file|--var-file|--var)
         option=$1
         (($# >= 2)) && [[ -n $2 ]] || { cli_error "missing value for $option"; return 2; }
         value=$2
@@ -309,9 +415,15 @@ main() {
             output_file=$value
             output_set=1
             ;;
+          --vars-file|--var-file)
+            var_files+=("$value")
+            ;;
+          --var)
+            var_specs+=("$value")
+            ;;
         esac
         ;;
-      --input=*|--output=*)
+      --input=*|--output=*|--vars-file=*|--var-file=*|--var=*)
         option=${1%%=*}
         value=${1#*=}
         [[ -n $value ]] || { cli_error "missing value for $option"; return 2; }
@@ -320,10 +432,14 @@ main() {
           ((input_set == 0)) || { cli_error 'duplicate --input'; return 2; }
           input_file=$value
           input_set=1
-        else
+        elif [[ $option == --output ]]; then
           ((output_set == 0)) || { cli_error 'duplicate --output'; return 2; }
           output_file=$value
           output_set=1
+        elif [[ $option == --var ]]; then
+          var_specs+=("$value")
+        else
+          var_files+=("$value")
         fi
         ;;
       *)
@@ -336,6 +452,12 @@ main() {
     cli_error '--check does not accept --output'
     return 2
   fi
+  for file in "${var_files[@]}"; do
+    load_vars_file "$file" || return $?
+  done
+  for spec in "${var_specs[@]}"; do
+    set_variable "$spec" '--var' || return $?
+  done
   process_template "$mode" "$input_file" "$output_file"
 }
 
