@@ -45,5 +45,5 @@ elif ! grep -Fqx "## $version" CHANGELOG.md; then
     printf '\n'
     tail -n +2 CHANGELOG.md
   } >"$temp"
-  cat -- "$temp" > CHANGELOG.md
+  cat -- "$temp" >CHANGELOG.md
 fi
