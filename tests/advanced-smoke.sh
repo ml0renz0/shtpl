@@ -53,46 +53,46 @@ leaf() {
   local target=$1
   choose 10
   case $choice in
-    0)
-      printf '%s\n' 'plain text' >>"$input"
-      printf '%s\n' 'plain text' >>"$target"
-      ;;
-    1)
-      printf '%s\n' 'value=$name' >>"$input"
-      printf '%s\n' 'value=world' >>"$target"
-      ;;
-    2)
-      printf '%s\n' 'arithmetic=$((2+3)),$((4*5))' >>"$input"
-      printf '%s\n' 'arithmetic=5,20' >>"$target"
-      ;;
-    3)
-      printf '%s\n' 'commands=$(printf A),$(printf B)' >>"$input"
-      printf '%s\n' 'commands=A,B' >>"$target"
-      ;;
-    4)
-      printf '%s\n' '# $(exit 99) ${UNDEFINED}' >>"$input"
-      printf '%s\n' '# $(exit 99) ${UNDEFINED}' >>"$target"
-      ;;
-    5)
-      printf '%s\n' 'unicode=ñ/漢字/🙂' >>"$input"
-      printf '%s\n' 'unicode=ñ/漢字/🙂' >>"$target"
-      ;;
-    6)
-      printf '%s\n' 'literal=\$name' >>"$input"
-      printf '%s\n' 'literal=$name' >>"$target"
-      ;;
-    7)
-      printf '%s\n' "trailing=\\" >>"$input"
-      printf '%s\n' "trailing=\\" >>"$target"
-      ;;
-    8)
-      printf '%s\n' '__SHTPL_00000001__' >>"$input"
-      printf '%s\n' '__SHTPL_00000001__' >>"$target"
-      ;;
-    9)
-      printf '\n' >>"$input"
-      printf '\n' >>"$target"
-      ;;
+  0)
+    printf '%s\n' 'plain text' >>"$input"
+    printf '%s\n' 'plain text' >>"$target"
+    ;;
+  1)
+    printf '%s\n' 'value=$name' >>"$input"
+    printf '%s\n' 'value=world' >>"$target"
+    ;;
+  2)
+    printf '%s\n' 'arithmetic=$((2+3)),$((4*5))' >>"$input"
+    printf '%s\n' 'arithmetic=5,20' >>"$target"
+    ;;
+  3)
+    printf '%s\n' 'commands=$(printf A),$(printf B)' >>"$input"
+    printf '%s\n' 'commands=A,B' >>"$target"
+    ;;
+  4)
+    printf '%s\n' '# $(exit 99) ${UNDEFINED}' >>"$input"
+    printf '%s\n' '# $(exit 99) ${UNDEFINED}' >>"$target"
+    ;;
+  5)
+    printf '%s\n' 'unicode=ñ/漢字/🙂' >>"$input"
+    printf '%s\n' 'unicode=ñ/漢字/🙂' >>"$target"
+    ;;
+  6)
+    printf '%s\n' 'literal=\$name' >>"$input"
+    printf '%s\n' 'literal=$name' >>"$target"
+    ;;
+  7)
+    printf '%s\n' "trailing=\\" >>"$input"
+    printf '%s\n' "trailing=\\" >>"$target"
+    ;;
+  8)
+    printf '%s\n' '__SHTPL_00000001__' >>"$input"
+    printf '%s\n' '__SHTPL_00000001__' >>"$target"
+    ;;
+  9)
+    printf '\n' >>"$input"
+    printf '\n' >>"$target"
+    ;;
   esac
 }
 
@@ -105,35 +105,35 @@ node() {
   choose 6
   kind=$choice
   case $kind in
-    0|1)
-      leaf "$target"
-      ;;
-    2)
-      printf '{%% if 1 == 1 %%}\n' >>"$input"
-      node "$((depth - 1))" "$target"
-      printf '{%% endif %%}\n' >>"$input"
-      ;;
-    3)
-      printf '{%% if 1 == 0 %%}\n' >>"$input"
-      printf '%s\n' 'never=$(exit 97)' >>"$input"
-      printf '{%% else %%}\n' >>"$input"
-      node "$((depth - 1))" "$target"
-      printf '{%% endif %%}\n' >>"$input"
-      ;;
-    4)
-      printf '{%% for item in 1 %%}\n' >>"$input"
-      node "$((depth - 1))" "$target"
-      printf '{%% endfor %%}\n' >>"$input"
-      ;;
-    5)
-      printf '{%% for item in 1 2 %%}\n' >>"$input"
-      ((node_id += 1))
-      scratch="$work/node-$case_index-$node_id.expected"
-      : >"$scratch"
-      node "$((depth - 1))" "$scratch"
-      cat -- "$scratch" "$scratch" >>"$target"
-      printf '{%% endfor %%}\n' >>"$input"
-      ;;
+  0 | 1)
+    leaf "$target"
+    ;;
+  2)
+    printf '{%% if 1 == 1 %%}\n' >>"$input"
+    node "$((depth - 1))" "$target"
+    printf '{%% endif %%}\n' >>"$input"
+    ;;
+  3)
+    printf '{%% if 1 == 0 %%}\n' >>"$input"
+    printf '%s\n' 'never=$(exit 97)' >>"$input"
+    printf '{%% else %%}\n' >>"$input"
+    node "$((depth - 1))" "$target"
+    printf '{%% endif %%}\n' >>"$input"
+    ;;
+  4)
+    printf '{%% for item in 1 %%}\n' >>"$input"
+    node "$((depth - 1))" "$target"
+    printf '{%% endfor %%}\n' >>"$input"
+    ;;
+  5)
+    printf '{%% for item in 1 2 %%}\n' >>"$input"
+    ((node_id += 1))
+    scratch="$work/node-$case_index-$node_id.expected"
+    : >"$scratch"
+    node "$((depth - 1))" "$scratch"
+    cat -- "$scratch" "$scratch" >>"$target"
+    printf '{%% endfor %%}\n' >>"$input"
+    ;;
   esac
 }
 
